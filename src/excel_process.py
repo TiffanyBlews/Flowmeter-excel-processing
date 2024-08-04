@@ -38,7 +38,7 @@ class ExcelProcessor:
 
         ws2 = wb2[date]
 
-        # 复制流量计数据到计算表格
+        print('复制流量计数据到计算表格：')
         for row in range(4, 29):
 
             for col in range(4, 8):
@@ -48,22 +48,42 @@ class ExcelProcessor:
                 ws2.cell(row, 3).value = ws2.cell(row, 2).value - ws2.cell(row-1, 2).value
                 ws2.cell(row, 5).value = ws2.cell(row, 4).value - ws2.cell(row-1, 4).value
             for col in range(2, 6):
-                print(row, ws2.cell(row=row, column=col).value, end='')
+                cell_value = ws2.cell(row=row, column=col).value
+                
+                if isinstance(cell_value,str):
+                    formatted_value = cell_value
+                elif cell_value is None:
+                    formatted_value = 'None'
+                else:
+                    formatted_value = f'{cell_value:.2f}'
+
+                print(f'{row}\t{formatted_value}\t', end='')
+
             print('')
 
-        # 复制含水数据到计算表格
+        print('复制含水数据到计算表格：')
         for row in range(4, 29):
             for col in range(10, 12):
                 ws2.cell(row=row, column=col - 3).value = ws1.cell(row=row, column=col).value
-                print(ws2.cell(row=row, column=col - 3).value, end='')
+                cell_value = ws2.cell(row=row, column=col - 3).value
+                
+                if isinstance(cell_value,str):
+                    formatted_value = cell_value
+                elif cell_value is None:
+                    formatted_value = 'None'
+                else:
+                    formatted_value = f'{cell_value:.2f}'
+
+                print(f'{formatted_value}\t', end='')
+
             print('')
 
         # 补全G4:G28中的空值为0.1左右的随机数，H4:H28中的空值为0.06左右的随机数
         for row in range(4, 29):
             if ws2.cell(row=row, column=7).value is None:
-                ws2.cell(row=row, column=7).value = random.normalvariate(0.1, 0.03)
+                ws2.cell(row=row, column=7).value = random.normalvariate(0.1, 0.05)
             if ws2.cell(row=row, column=8).value is None:
-                ws2.cell(row=row, column=8).value = random.normalvariate(0.06, 0.003)
+                ws2.cell(row=row, column=8).value = random.normalvariate(0.06, 0.005)
 
         ws2.cell(1,1).value = date
 
@@ -100,6 +120,7 @@ class ExcelProcessor:
         
         # 获取日期对应的行
         date_column = ws3['A']
+        row_index = -1
         for idx, cell in enumerate(date_column):
             if idx <=1:
                 continue
@@ -107,16 +128,19 @@ class ExcelProcessor:
             if cell.value == date_obj: # 直接用`==`比较两个datetime对象
                 row_index = idx + 1  # 因为索引从0开始，所以需要+1
                 break
-        else:
+        
+        if row_index == -1:
             row_index = len(date_column) + 1
             ws3.cell(row=row_index, column=1).value = date_obj.strftime('%Y{y}%m{m}%d{d}')\
                 .format(y='年',m='月', d='日') # 编码问题，见 https://blog.csdn.net/lanxingbudui/article/details/124018316
 
         # 将计算结果数据复制到汇总表格中
+        print(f'向3表的第{row_index}行 “{ws3.cell(row=row_index, column=1).value}”写入数据：')
         for col, value in zip([2, 4, 3, 6, 5, 7], result_data):
-            print(value)
+            print(f'{value:.2f}\t', end='')
             ws3.cell(row=row_index, column=col).value = value
-
+        print('')
+        
         # 保存汇总表格
         wb3.save(self.summary_file)
 
@@ -153,7 +177,7 @@ def convert_to_excel_date(date_string):
 
 
 # processor = ExcelProcessor('1.xlsx', '2.xlsx', '3.xlsx')
-# date = '24.2.4'
+# date = '24.6.20'
 # processor.first_1to2(date)
 # processor.second_2to3(date)
 
@@ -184,12 +208,19 @@ class ExcelProcessorGUI:
         self.run_button = tk.Button(root, text="运行", command=self.run_process, font=custom_font)  # 设置按钮的字体
         self.run_button.pack()
 
+        self.clear_button = tk.Button(root, text="清空选择", command=self.clear_list, font=custom_font)
+        self.clear_button.pack()
+
         self.error_file = "error_sheets.txt"
         self.error_sheets = []
 
         self.processor = ExcelProcessor(raw_file, calculation_file, summary_file)
 
         self.populate_sheet_listbox()
+    
+    def clear_list(self):
+        self.sheet_listbox.selection_clear(0, tk.END)
+
 
     def populate_sheet_listbox(self):
         try:
@@ -223,7 +254,7 @@ class ExcelProcessorGUI:
             try:
                 self.processor.first_1to2(sheet_name)
                 self.processor.second_2to3(sheet_name)
-                messagebox.showinfo("完成", f"{sheet_name} 处理完成")
+                # messagebox.showinfo("完成", f"{sheet_name} 处理完成")
                 print("====处理完成"+sheet_name+"====")
             except Exception as e:
                 messagebox.showerror("错误", f"处理 {sheet_name} 时出现错误: {e}")
