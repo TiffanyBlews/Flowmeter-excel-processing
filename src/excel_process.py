@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import simpledialog, messagebox, Scrollbar
 import openpyxl
 import datetime
+import pywintypes
 from win32com.client import DispatchEx
 import random
 import re
