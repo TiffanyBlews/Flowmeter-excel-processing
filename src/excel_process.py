@@ -8,6 +8,13 @@ from win32com.client import DispatchEx
 import random
 import re
 
+def normalize_date(date_str):
+    # 用正则表达式去除重复的点
+    normalized = re.sub(r'\.+', '.', date_str)
+    # 去掉开头和结尾的点（如果有的话）
+    normalized = normalized.strip('.')
+    return normalized
+
 current_path = sys.argv[0]
 cwd = os.path.dirname(current_path)
 
@@ -116,7 +123,7 @@ class ExcelProcessor:
 
         # excel_date = convert_to_excel_date(date)
         
-        date_obj = datetime.datetime.strptime(date, '%y.%m.%d')
+        date_obj = datetime.datetime.strptime(normalize_date(date), '%y.%m.%d')
         
         # 获取日期对应的行
         date_column = ws3['A']
@@ -279,7 +286,7 @@ class ExcelProcessorGUI:
             return sheet_name
     def is_valid_date(self, date_string):
         try:
-            datetime.datetime.strptime(date_string, '%y.%m.%d')
+            datetime.datetime.strptime(normalize_date(date_string), '%y.%m.%d')
             return True
         except ValueError:
             return False
