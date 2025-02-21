@@ -1,319 +1,123 @@
 import os
 import sys
-import tkinter as tk
-from tkinter import simpledialog, messagebox, Scrollbar
-import openpyxl
-import datetime
-from win32com.client import DispatchEx
-import random
 import re
-
-def normalize_date(date_str):
-    # 用正则表达式去除重复的点
-    normalized = re.sub(r'\.+', '.', date_str)
-    # 去掉开头和结尾的点（如果有的话）
-    normalized = normalized.strip('.')
-    return normalized
-
-current_path = sys.argv[0]
-cwd = os.path.dirname(current_path)
+import random
+import datetime
+import pandas as pd
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import openpyxl
 
 class ExcelProcessor:
-    def __init__(self, raw_file, calculation_file, summary_file):
-        self.raw_file = os.path.join(cwd, raw_file)
-        # just_open(self.raw_file)
-        self.calculation_file = os.path.join(cwd, calculation_file)
-        self.summary_file = os.path.join(cwd, summary_file)
+    def __init__(self, raw_file, output_file):
+        self.raw_file = raw_file
+        self.output_file = output_file
 
-
-    def first_1to2(self, date):
-        '''
-        将1表中的原始数据复制到2表得出计算结果
-        '''
-        # 读取原始数据表格
-        wb1 = openpyxl.load_workbook(self.raw_file,data_only=True, read_only=True)
-        # 读取计算表格
-        wb2 = openpyxl.load_workbook(self.calculation_file)
-
-        # 获取原始数据sheet
-        ws1 = wb1[date]
-        # 获取计算表格sheet
-        if wb2.__contains__(date) is False:
-            self.new_sheet(date)
-            wb2 = openpyxl.load_workbook(self.calculation_file)
-            print('new_sheet',date)
-
-        ws2 = wb2[date]
-
-        print('复制流量计数据到计算表格：')
-        for row in range(4, 29):
-
-            for col in range(4, 8):
-                ws2.cell(row=row, column=col - 2).value = ws1.cell(row=row, column=col).value
-
-            if row != 4:
-                ws2.cell(row, 3).value = ws2.cell(row, 2).value - ws2.cell(row-1, 2).value
-                ws2.cell(row, 5).value = ws2.cell(row, 4).value - ws2.cell(row-1, 4).value
-            for col in range(2, 6):
-                cell_value = ws2.cell(row=row, column=col).value
-                
-                if isinstance(cell_value,str):
-                    formatted_value = cell_value
-                elif cell_value is None:
-                    formatted_value = 'None'
-                else:
-                    formatted_value = f'{cell_value:.2f}'
-
-                print(f'{row}\t{formatted_value}\t', end='')
-
-            print('')
-
-        print('复制含水数据到计算表格：')
-        for row in range(4, 29):
-            for col in range(10, 12):
-                ws2.cell(row=row, column=col - 3).value = ws1.cell(row=row, column=col).value
-                cell_value = ws2.cell(row=row, column=col - 3).value
-                
-                if isinstance(cell_value,str):
-                    formatted_value = cell_value
-                elif cell_value is None:
-                    formatted_value = 'None'
-                else:
-                    formatted_value = f'{cell_value:.2f}'
-
-                print(f'{formatted_value}\t', end='')
-
-            print('')
-
-        # 补全G4:G28中的空值为0.1左右的随机数，H4:H28中的空值为0.06左右的随机数
-        for row in range(4, 29):
-            if ws2.cell(row=row, column=7).value is None:
-                ws2.cell(row=row, column=7).value = random.normalvariate(0.1, 0.05)
-            if ws2.cell(row=row, column=8).value is None:
-                ws2.cell(row=row, column=8).value = random.normalvariate(0.06, 0.005)
-
-        ws2.cell(1,1).value = date
-
-        # 保存计算表格
-        wb2.save(self.calculation_file)
-
-        just_open(self.calculation_file)
-
-    def second_2to3(self, date):
-        '''将2表中的结果粘贴到3表'''
-
-        # 读取计算表格
-        wb2 = openpyxl.load_workbook(self.calculation_file, data_only=True, read_only=True)
-        # 读取汇总表格
-        wb3 = openpyxl.load_workbook(self.summary_file)
-
-        # 获取计算表格sheet
-        ws2 = wb2[date]
-        # 获取汇总表格sheet
-        ws3 = wb3['Sheet1']
-
-        # print(ws3.cell(3,1).value)
-
-        # 获取计算结果数据
-        result_data = []
-        for col in range(11, 15):
-            result_data.append(ws2.cell(row=29, column=col).value)
-        for col in range(7, 9):
-            result_data.append(ws2.cell(row=29, column=col).value)
-
-        # excel_date = convert_to_excel_date(date)
+    def process_sheet(self, sheet_name, date_obj):
+        df_raw = pd.read_excel(self.raw_file, sheet_name=sheet_name)
+        result = self.calculate_values(df_raw)
+        df_result = pd.read_excel(self.output_file, sheet_name='Sheet1')
         
-        date_obj = datetime.datetime.strptime(normalize_date(date), '%y.%m.%d')
-        
-        # 获取日期对应的行
-        date_column = ws3['A']
-        row_index = -1
-        for idx, cell in enumerate(date_column):
-            if idx <=1:
-                continue
-            
-            if cell.value == date_obj: # 直接用`==`比较两个datetime对象
-                row_index = idx + 1  # 因为索引从0开始，所以需要+1
-                break
-        
-        if row_index == -1:
-            row_index = len(date_column) + 1
-            ws3.cell(row=row_index, column=1).value = date_obj.strftime('%Y{y}%m{m}%d{d}')\
-                .format(y='年',m='月', d='日') # 编码问题，见 https://blog.csdn.net/lanxingbudui/article/details/124018316
+        if date_obj in df_result['时间'].values:
+            df_result.loc[df_result['时间'] == date_obj, df_result.columns[1:7]] = result
+        else:
+            df_result.loc[len(df_result), df_result.columns[:7]] = [date_obj] + result
 
-        # 将计算结果数据复制到汇总表格中
-        print(f'向3表的第{row_index}行 “{ws3.cell(row=row_index, column=1).value}”写入数据：')
-        for col, value in zip([2, 4, 3, 6, 5, 7], result_data):
-            print(f'{value:.2f}\t', end='')
-            ws3.cell(row=row_index, column=col).value = value
-        print('')
-        
-        # 保存汇总表格
-        wb3.save(self.summary_file)
+        df_result.to_excel(self.output_file, index=False)
 
-    def new_sheet(self, date):
-        # 读取计算表格
-        wb2 = openpyxl.load_workbook(self.calculation_file)
+    def calculate_values(self, df):
+        data = df.iloc[2:28].copy()
+        processed = pd.DataFrame()
+        result = [None] * 6
 
-        # 获取计算表格sheet
-        ws2 = wb2['模板']
-        
-        new_ws2 = wb2.copy_worksheet(ws2)
-        new_ws2.title = date
-        wb2.save(self.calculation_file)
+        processed['VolumeFlowReading'] = data.iloc[:, 3]
+        processed['VolumeFlowDiff'] = processed['VolumeFlowReading'].diff()
+        processed['VolumeFlowDiffCalculated'] = processed['VolumeFlowDiff'] * 0.889
+        result[0] = processed['VolumeFlowDiffCalculated'].sum()
 
-def just_open(filename):
-    xlApp = DispatchEx("Excel.Application")
-    xlApp.Visible = False
-    xlBook = xlApp.Workbooks.Open(os.path.join(cwd, filename))
-    xlBook.Save()
-    xlBook.Close()
+        processed['MassFlowReading'] = data.iloc[:, 5]
+        processed['MassFlowDiff'] = processed['MassFlowReading'].diff()
+        processed['MassFlowDiffCalculated'] = processed['MassFlowDiff'] * 0.889
+        result[1] = processed['MassFlowDiffCalculated'].sum()
 
+        processed['WaterManual'] = data.iloc[:, 9].apply(lambda x: x if pd.notna(x) else random.normalvariate(0.1, 0.05))
+        processed['WaterOnline'] = data.iloc[:, 10].apply(lambda x: x if pd.notna(x) else random.normalvariate(0.06, 0.02))
+        result[3] = processed['WaterManual'].mean()
+        result[5] = processed['WaterOnline'].mean()
 
-def convert_to_excel_date(date_string):
-    # 将日期字符串解析为 datetime 对象
-    date_obj = datetime.datetime.strptime(date_string, '%y.%m.%d')
-
-    # 计算日期与 1899 年 12 月 31 日之间的天数差
-    delta_days = (date_obj - datetime.datetime(1899, 12, 31)).days
-
-    # 将天数差加上 Excel 日期的起始值
-    excel_date = delta_days + 1  # Excel日期起始值是1900年1月1日
-
-    return excel_date
-
-
-# processor = ExcelProcessor('1.xlsx', '2.xlsx', '3.xlsx')
-# date = '24.6.20'
-# processor.first_1to2(date)
-# processor.second_2to3(date)
-
+        result[2] = result[0] * (1 - 0.01 * result[3])
+        result[4] = (processed['MassFlowDiffCalculated'] * (1 - 0.01 * processed['WaterOnline'])).sum()
+        print(result)
+        return result
 
 class ExcelProcessorGUI:
-    def __init__(self, root, raw_file, calculation_file, summary_file):
-        # raw_file = simpledialog.askstring("输入文件名", "请输入原油流量计记录表格文件名：")
+    def __init__(self, root, processor):
         self.root = root
-        self.root.title("Excel Processor")
+        self.processor = processor
+        self.root.title("Excel 数据处理器")
 
-        # 创建一个自定义字体
-        custom_font = ("Arial", 14)
-
-        # 创建一个滚动条
-        self.scrollbar = Scrollbar(root, orient=tk.VERTICAL)
-
-        # 创建列表框并关联滚动条
-        self.sheet_listbox = tk.Listbox(root, selectmode=tk.MULTIPLE, font=custom_font, height=25,
-                                         yscrollcommand=self.scrollbar.set)
-
-        # 设置滚动条与列表框的关联
-        self.scrollbar.config(command=self.sheet_listbox.yview)
-
-        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.sheet_listbox = tk.Listbox(root, selectmode=tk.MULTIPLE, height=20)
         self.sheet_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+        self.scrollbar = tk.Scrollbar(root, orient=tk.VERTICAL, command=self.sheet_listbox.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.sheet_listbox.config(yscrollcommand=self.scrollbar.set)
 
-        self.run_button = tk.Button(root, text="运行", command=self.run_process, font=custom_font)  # 设置按钮的字体
+        self.run_button = tk.Button(root, text="运行", command=self.run_process)
         self.run_button.pack()
 
-        self.clear_button = tk.Button(root, text="清空选择", command=self.clear_list, font=custom_font)
+        self.clear_button = tk.Button(root, text="清空选择", command=self.clear_list)
         self.clear_button.pack()
 
-        self.error_file = "error_sheets.txt"
-        self.error_sheets = []
-
-        self.processor = ExcelProcessor(raw_file, calculation_file, summary_file)
-
         self.populate_sheet_listbox()
-    
-    def clear_list(self):
-        self.sheet_listbox.selection_clear(0, tk.END)
-
 
     def populate_sheet_listbox(self):
         try:
             wb = openpyxl.load_workbook(self.processor.raw_file, read_only=True)
-            sheet_names = wb.sheetnames
-            for sheet_name in sheet_names:
-                self.sheet_listbox.insert(0, sheet_name)  # 在索引 0 处插入新的 sheet 名称
+            for sheet_name in wb.sheetnames:
+                self.sheet_listbox.insert(tk.END, sheet_name)
         except Exception as e:
             messagebox.showerror("错误", f"无法加载工作簿: {e}")
 
+    def clear_list(self):
+        self.sheet_listbox.selection_clear(0, tk.END)
+
     def run_process(self):
-        selected_sheets = self.sheet_listbox.curselection()
+        selected_sheets = [self.sheet_listbox.get(i) for i in self.sheet_listbox.curselection()]
         if not selected_sheets:
             messagebox.showwarning("警告", "请至少选择一个表格进行处理")
             return
 
-        for index in selected_sheets:
-            sheet_name = self.sheet_listbox.get(index)
-            sheet_name = self.clean_sheet_name(sheet_name)
-            print("====正在处理"+sheet_name+"====")
-            if not self.is_valid_date(sheet_name):
-                messagebox.showinfo("提示", f"表格 {sheet_name} 的名称不符合 %y.%m.%d 格式，请手动输入一个日期")
-                print(f"表格 {sheet_name} 的名称不符合 %y.%m.%d 格式，请手动输入一个日期")
-                real_date = self.get_valid_date_from_user(sheet_name)
-                if real_date:
-                    self.rename_sheet(sheet_name, real_date)
-                    sheet_name = real_date
-                else:
-                    continue
-
+        for sheet in selected_sheets:
+            date_str = self.normalize_date(sheet)
+            print(date_str)
             try:
-                self.processor.first_1to2(sheet_name)
-                self.processor.second_2to3(sheet_name)
-                # messagebox.showinfo("完成", f"{sheet_name} 处理完成")
-                print("====处理完成"+sheet_name+"====")
-            except Exception as e:
-                messagebox.showerror("错误", f"处理 {sheet_name} 时出现错误: {e}")
-                print("====处理失败"+sheet_name+"====")
-                self.error_sheets.append(sheet_name)
-        if len(self.error_sheets)>=1:
-            self.save_error_sheets()
+                date_obj = datetime.datetime.strptime(date_str, "%Y.%m.%d")
+            except ValueError:
+                try:
+                    date_obj = datetime.datetime.strptime(date_str, "%y.%m.%d")
+                except ValueError:
+                    date_str = simpledialog.askstring("输入日期", f"{sheet} 不是有效的日期格式 %Y.%m.%d，请输入正确的日期格式 (如 2024.12.20)：")
+                    try:
+                        date_obj = datetime.datetime.strptime(date_str, "%Y.%m.%d")
+                    except ValueError:
+                        messagebox.showerror("错误", "无效的日期格式，跳过此表格")
+                        continue
+            
+            self.processor.process_sheet(sheet, date_obj)
+            print(f"====={sheet} 处理完成=====")
 
-    def clean_sheet_name(self, sheet_name):
-        # 匹配 %y.%m.%d 格式的日期字符串
-        match = re.match(r'\d{2,4}\.\d{1,2}\.\d{1,2}', sheet_name)
-        if match:
-            # 获取匹配到的日期字符串
-            date_str = match.group()
-            # 使用 .split() 方法以点为分隔符分割字符串，并只保留中间两个点
-            parts = date_str.split('.')
-            real_date = '.'.join(parts[:2] + parts[-1:])
-            self.rename_sheet(sheet_name, real_date)
-            sheet_name = real_date
-            return sheet_name
-        else:
-            return sheet_name
-    def is_valid_date(self, date_string):
-        try:
-            datetime.datetime.strptime(normalize_date(date_string), '%y.%m.%d')
-            return True
-        except ValueError:
-            return False
+    def normalize_date(self, date_str):
+        return re.sub(r'\.+', '.', date_str).strip('. ')
 
-    def get_valid_date_from_user(self, sheet_name):
-        new_date = simpledialog.askstring("输入日期", f"表格 {sheet_name} 的名称不符合 %y.%m.%d 格式，请修改成该格式，比如 24.1.10：")
-        return new_date.strip() if new_date else None
+if __name__ == "__main__":
+    current_path = sys.argv[0]
+    cwd = os.path.dirname(current_path)
 
-    def rename_sheet(self, old_name, new_name):
-        try:
-            wb1 = openpyxl.load_workbook(self.processor.raw_file)
-            ws = wb1[old_name]
-            ws.title = new_name
-            wb1.save(self.processor.raw_file)
-
-        except Exception as e:
-            messagebox.showerror("错误", f"重命名 {old_name} 时出现错误: {e}")
-
-    def save_error_sheets(self):
-        try:
-            with open(self.error_file, 'w') as file:
-                for sheet_name in self.error_sheets:
-                    file.write(sheet_name + '\n')
-            messagebox.showinfo("完成", f"出错的表格名称已保存到文件: {self.error_file}")
-        except Exception as e:
-            messagebox.showerror("错误", f"保存出错的表格名称时出现错误: {e}")
-
-root = tk.Tk()
-app = ExcelProcessorGUI(root, '1.xlsx', '2.xlsx', '3.xlsx')
-root.mainloop()
+    
+    raw_file = os.path.join(cwd, '1.xlsx')
+    output_file = os.path.join(cwd, '3.xlsx')
+    processor = ExcelProcessor(raw_file, output_file)
+    root = tk.Tk()
+    app = ExcelProcessorGUI(root, processor)
+    root.mainloop()
