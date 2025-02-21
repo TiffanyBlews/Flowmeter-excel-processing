@@ -14,8 +14,9 @@ class ExcelProcessor:
         self.raw_file = raw_file
 
         if not os.path.exists(output_file):
-            df = pd.DataFrame(columns=['日期', '人工化验液量（刮板）（t/d）', '人工化验液量（质量）（t/d）', '人工化验油量（t/d）', '人工含水（%）', '含水仪油量（t/d）', '含水仪含水（%）'])
+            df = pd.DataFrame(columns=['时间', '人工化验液量（刮板）（t/d）', '人工化验液量（质量）（t/d）', '人工化验油量（t/d）', '人工含水（%）', '含水仪油量（t/d）', '含水仪含水（%）'])
             df.to_excel(output_file, index=False)
+            print(f"已创建输出文件 {output_file}")
         self.output_file = output_file
         
 
@@ -103,9 +104,9 @@ class ExcelProcessorGUI:
                 try:
                     date_obj = datetime.datetime.strptime(date_str, "%y.%m.%d")
                 except ValueError:
-                    date_str = simpledialog.askstring("输入日期", f"{sheet} 不是有效的日期格式 %Y.%m.%d，请输入正确的日期格式 (如 2024.12.20)：")
+                    date_str = simpledialog.askstring("输入日期", f"{sheet} 不是有效的日期格式 %y.%m.%d，请输入正确的日期格式 (如 24.12.20)：")
                     try:
-                        date_obj = datetime.datetime.strptime(date_str, "%Y.%m.%d")
+                        date_obj = datetime.datetime.strptime(date_str, "%y.%m.%d")
                     except ValueError:
                         messagebox.showerror("错误", "无效的日期格式，跳过此表格")
                         continue
