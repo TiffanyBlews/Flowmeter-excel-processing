@@ -10,8 +10,14 @@ import openpyxl
 
 class ExcelProcessor:
     def __init__(self, raw_file, output_file):
+        assert os.path.exists(raw_file), "原始数据文件不存在"
         self.raw_file = raw_file
+
+        if not os.path.exists(output_file):
+            df = pd.DataFrame(columns=['日期', '人工化验液量（刮板）（t/d）', '人工化验液量（质量）（t/d）', '人工化验油量（t/d）', '人工含水（%）', '含水仪油量（t/d）', '含水仪含水（%）'])
+            df.to_excel(output_file, index=False)
         self.output_file = output_file
+        
 
     def process_sheet(self, sheet_name, date_obj):
         df_raw = pd.read_excel(self.raw_file, sheet_name=sheet_name)
@@ -42,10 +48,10 @@ class ExcelProcessor:
 
         processed['WaterManual'] = data.iloc[:, 9].apply(lambda x: x if pd.notna(x) else random.normalvariate(0.1, 0.05))
         processed['WaterOnline'] = data.iloc[:, 10].apply(lambda x: x if pd.notna(x) else random.normalvariate(0.06, 0.02))
-        result[3] = processed['WaterManual'].mean()
-        result[5] = processed['WaterOnline'].mean()
+        result[3] = float(processed['WaterManual'].mean())
+        result[5] = float(processed['WaterOnline'].mean())
 
-        result[2] = result[0] * (1 - 0.01 * result[3])
+        result[2] = float(result[0] * (1 - 0.01 * result[3]))
         result[4] = (processed['MassFlowDiffCalculated'] * (1 - 0.01 * processed['WaterOnline'])).sum()
         print(result)
         return result
@@ -112,12 +118,12 @@ class ExcelProcessorGUI:
 
 if __name__ == "__main__":
     current_path = sys.argv[0]
-    cwd = os.path.dirname(current_path)
-
-    
+    cwd = os.path.dirname(current_path)    
     raw_file = os.path.join(cwd, '1.xlsx')
     output_file = os.path.join(cwd, '3.xlsx')
+
     processor = ExcelProcessor(raw_file, output_file)
+
     root = tk.Tk()
     app = ExcelProcessorGUI(root, processor)
     root.mainloop()
