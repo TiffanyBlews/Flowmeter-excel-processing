@@ -1,5 +1,5 @@
 # 某企业原油流量计数据处理
-帮家里人写的工作用小程序，通过使用 `pandas` 与 `openpyxl` 处理表格数据，使用`tkinter`制作了简单GUI。
+帮家里人写的工作用小程序，使用 `pandas` 与 `openpyxl` 处理表格数据，使用`tkinter`制作了简单GUI。
 
 ## 构建方法
 1. `pip install -r .\src\requirements.txt`
